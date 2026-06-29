@@ -101,6 +101,7 @@ class EMDS7COCODataset(Dataset):
         for ann in self.annotations:
             img_id = ann["image_id"]
             self.image_to_annotations.setdefault(img_id, []).append(ann)
+        self.image_to_ignore_annotations: Dict[int, List[Dict[str, Any]]] = {}
 
         self.image_ids = sorted(self.images.keys())
 
@@ -134,8 +135,10 @@ class EMDS7COCODataset(Dataset):
         for img_id in self.image_ids:
             anns = self.image_to_annotations.get(img_id, [])
             base_anns = [ann for ann in anns if ann["category_id"] in self.base_ids]
+            novel_anns = [ann for ann in anns if ann["category_id"] in self.novel_ids]
             if len(base_anns) > 0:
                 new_image_to_annotations[img_id] = base_anns
+                self.image_to_ignore_annotations[img_id] = novel_anns
                 new_image_ids.append(img_id)
 
         self.image_to_annotations = new_image_to_annotations
@@ -166,6 +169,7 @@ class EMDS7COCODataset(Dataset):
         img_id = self.image_ids[idx]
         img_info = self.images[img_id]
         anns = self.image_to_annotations.get(img_id, [])
+        ignore_anns = self.image_to_ignore_annotations.get(img_id, [])
 
         # Load image
         image = self._load_image(img_info)
@@ -201,10 +205,24 @@ class EMDS7COCODataset(Dataset):
             labels = np.array(labels, dtype=np.int64)
             areas = np.array(areas, dtype=np.float32)
 
+        ignore_boxes = []
+        for ann in ignore_anns:
+            x, y, w, h = ann["bbox"]
+            x1 = x / orig_w
+            y1 = y / orig_h
+            w_norm = w / orig_w
+            h_norm = h / orig_h
+            ignore_boxes.append([x1 + w_norm / 2.0, y1 + h_norm / 2.0, w_norm, h_norm])
+        if len(ignore_boxes) == 0:
+            ignore_boxes = np.zeros((0, 4), dtype=np.float32)
+        else:
+            ignore_boxes = np.array(ignore_boxes, dtype=np.float32)
+
         target = {
             "boxes": torch.from_numpy(boxes),
             "labels": torch.from_numpy(labels),
             "areas": torch.from_numpy(areas),
+            "ignore_boxes": torch.from_numpy(ignore_boxes),
             "image_id": torch.tensor([img_id]),
             "orig_size": torch.tensor([orig_h, orig_w]),
         }

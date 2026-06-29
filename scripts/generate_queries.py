@@ -81,7 +81,7 @@ def main():
     query_set = HierarchicalQuerySet(queries, DEFAULT_HARD_NEGATIVES)
 
     if args.out is None:
-        out_path = base_dir / "data" / "emds7" / "queries.json"
+        out_path = (base_dir / config["data"].get("query_file", "../data/emds7/queries.json")).resolve()
     else:
         out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -81,8 +81,10 @@ bash scripts/train.sh
 H20 服务器（96GB VRAM）推荐使用 H20 专用配置：
 
 ```bash
-bash scripts/train.sh --config micro_internvl/config_h20.yaml
+bash scripts/train_h20.sh
 ```
+
+训练默认启用早停：验证集 `AP` 连续 30 个 epoch 不提升则自动停止，并保留最优检查点到 `checkpoints/final`。
 
 ### 5. 评估
 

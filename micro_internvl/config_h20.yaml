@@ -19,8 +19,8 @@ micro_internvl:
   temperature: 0.07
 
 training:
-  output_dir: "checkpoints"
-  num_epochs: 50
+  output_dir: "../checkpoints"
+  num_epochs: 200
   batch_size: 4
   gradient_accumulation_steps: 2
   effective_batch_size: 8
@@ -34,12 +34,20 @@ training:
   mixed_precision: "bf16"
   seed: 42
   save_every_epochs: 5
-  eval_every_epochs: 5
+  eval_every_epochs: 1
+  early_stopping:
+    patience: 30
+    metric: "AP"
+    mode: "max"
+    min_delta: 0.0
+    save_best: true
 
 loss:
   class_weight: 1.0
+  objectness_weight: 1.0
   bbox_weight: 5.0
   giou_weight: 2.0
+  ignore_iou_threshold: 0.3
   focal_alpha: 0.25
   focal_gamma: 2.0
   lambda_patch: 0.1
@@ -47,12 +55,12 @@ loss:
 
 data:
   image_dir: "../raw/emds7/EMDS7"
-  train_json: "data/emds7/instances_train.json"
-  val_json: "data/emds7/instances_val.json"
-  test_json: "data/emds7/instances_test.json"
-  category_map: "data/emds7/category_map.json"
-  base_novel_split: "data/emds7/base_novel_split.json"
-  query_file: "data/emds7/queries.json"
+  train_json: "../data/emds7/instances_train.json"
+  val_json: "../data/emds7/instances_val.json"
+  test_json: "../data/emds7/instances_test.json"
+  category_map: "../data/emds7/category_map.json"
+  base_novel_split: "../data/emds7/base_novel_split.json"
+  query_file: "../data/emds7/queries.json"
   resolution: 448
   num_workers: 8
   pin_memory: true
@@ -63,7 +71,7 @@ inference:
   top_k: 100
 
 logging:
-  log_dir: "outputs/logs"
+  log_dir: "../outputs/logs"
   use_wandb: false
   wandb_project: "micro-internvl"
   wandb_run_name: null

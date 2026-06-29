@@ -12,9 +12,7 @@ fi
 
 pip install --upgrade pip
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
-pip install transformers accelerate peft timm
-pip install pycocotools scipy Pillow PyYAML tqdm
-pip install wandb bitsandbytes
+pip install -r requirements.txt
 
 echo "Installation complete."
 echo "Next steps:"

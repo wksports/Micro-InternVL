@@ -14,6 +14,11 @@ from transformers.utils import logging
 
 from .configuration_intern_vit import InternVisionConfig
 
+try:
+    from transformers import Qwen3Config
+except ImportError:
+    Qwen3Config = None
+
 logger = logging.get_logger(__name__)
 
 
@@ -59,6 +64,13 @@ class InternVLChatConfig(PretrainedConfig):
             self.llm_config = Phi3Config(**llm_config)
         elif llm_config['architectures'][0] == 'Qwen2ForCausalLM':
             self.llm_config = Qwen2Config(**llm_config)
+        elif llm_config['architectures'][0] == 'Qwen3ForCausalLM':
+            if Qwen3Config is None:
+                raise ImportError(
+                    'Qwen3ForCausalLM requires transformers with Qwen3 support. '
+                    'Install transformers>=4.51.0.'
+                )
+            self.llm_config = Qwen3Config(**llm_config)
         else:
             raise ValueError('Unsupported architecture: {}'.format(llm_config['architectures'][0]))
         self.use_backbone_lora = use_backbone_lora

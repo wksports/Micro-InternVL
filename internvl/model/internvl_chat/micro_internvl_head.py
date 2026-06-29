@@ -21,12 +21,14 @@ class MicroInternVLDetectionHead(nn.Module):
     def __init__(
         self,
         input_dim: int,
+        text_dim: int,
         hidden_dim: int = 512,
         num_layers: int = 2,
         activation: str = "gelu",
     ):
         super().__init__()
         self.input_dim = input_dim
+        self.text_dim = text_dim
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
 
@@ -54,7 +56,11 @@ class MicroInternVLDetectionHead(nn.Module):
             nn.LayerNorm(hidden_dim),
             act,
             nn.Linear(hidden_dim, 1),
-            nn.Sigmoid(),
+        )
+
+        self.text_projection = nn.Sequential(
+            nn.Linear(hidden_dim, text_dim),
+            nn.LayerNorm(text_dim),
         )
 
         self._init_weights()
@@ -73,12 +79,15 @@ class MicroInternVLDetectionHead(nn.Module):
 
         Returns:
             Dict with pred_boxes [B, 1024, 4] (cx, cy, w, h normalized)
-            and pred_objectness [B, 1024, 1].
+            pred_objectness logits [B, 1024, 1], and patch_embeddings
+            [B, 1024, text_dim] aligned to the LLM text embedding space.
         """
         features = self.trunk(patch_features)
         pred_boxes = self.box_head(features)
         pred_objectness = self.objectness_head(features)
+        patch_embeddings = self.text_projection(features)
         return {
             "pred_boxes": pred_boxes,
             "pred_objectness": pred_objectness,
+            "patch_embeddings": patch_embeddings,
         }

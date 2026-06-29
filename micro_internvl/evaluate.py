@@ -87,9 +87,9 @@ def micro_internvl_predictions_to_coco(
 
                 boxes = pred_boxes[i]
                 logits = pred_logits[i]
-                obj_scores = pred_objectness[i, :, 0]
+                obj_scores = pred_objectness[i, :, 0].sigmoid()
 
-                cls_scores, labels = logits.max(dim=-1)
+                cls_scores, labels = logits.sigmoid().max(dim=-1)
                 scores = obj_scores * cls_scores
 
                 keep_mask = scores > confidence_threshold
@@ -158,7 +158,7 @@ def main():
         config = yaml.safe_load(f)
 
     base_dir = Path(args.config).parent
-    log_dir = base_dir.parent / "outputs" / "logs"
+    log_dir = (base_dir / config["logging"].get("log_dir", "../outputs/logs")).resolve()
     log_dir.mkdir(parents=True, exist_ok=True)
     setup_logging(log_dir / f"eval_{args.split}.log")
 
@@ -180,8 +180,9 @@ def main():
     model.eval()
 
     query_file = config["data"].get("query_file")
-    if query_file and Path(query_file).exists():
-        query_set = HierarchicalQuerySet.from_file(query_file)
+    query_path = (base_dir / query_file).resolve() if query_file else None
+    if query_path and query_path.exists():
+        query_set = HierarchicalQuerySet.from_file(str(query_path))
         category_name_list = [idx_to_name[i] for i in range(num_classes)]
         queries = query_set.get_queries(category_name_list, level=None)
         logger.info("Using hierarchical queries from query file")

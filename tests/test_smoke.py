@@ -19,11 +19,12 @@ from micro_internvl.losses import DetectionLoss, PatchTextAlignmentLoss, BoxText
 
 
 def test_detection_head():
-    head = MicroInternVLDetectionHead(input_dim=768, hidden_dim=512, num_layers=2)
+    head = MicroInternVLDetectionHead(input_dim=768, text_dim=2560, hidden_dim=512, num_layers=2)
     x = torch.randn(2, 1024, 768)
     out = head(x)
     assert out["pred_boxes"].shape == (2, 1024, 4)
     assert out["pred_objectness"].shape == (2, 1024, 1)
+    assert out["patch_embeddings"].shape == (2, 1024, 2560)
     print("PASS: Detection head output shapes correct")
 
 
@@ -31,6 +32,7 @@ def test_detection_loss():
     loss_fn = DetectionLoss(num_classes=41)
     pred_logits = torch.randn(2, 1024, 41)
     pred_boxes = torch.rand(2, 1024, 4)
+    pred_objectness = torch.randn(2, 1024, 1)
     target_labels = [
         torch.tensor([0, 5, 10]),
         torch.tensor([1, 2]),
@@ -39,8 +41,9 @@ def test_detection_loss():
         torch.rand(3, 4),
         torch.rand(2, 4),
     ]
-    losses = loss_fn(pred_logits, pred_boxes, target_labels, target_boxes)
+    losses = loss_fn(pred_logits, pred_boxes, pred_objectness, target_labels, target_boxes)
     assert "loss_det" in losses
+    assert "loss_objectness" in losses
     assert losses["loss_det"].item() >= 0
     print("PASS: Detection loss runs")
 

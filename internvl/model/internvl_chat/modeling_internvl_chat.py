@@ -26,6 +26,11 @@ from .configuration_internvl_chat import InternVLChatConfig
 from .modeling_intern_vit import InternVisionModel, has_flash_attn
 from .micro_internvl_head import MicroInternVLDetectionHead
 
+try:
+    from transformers import Qwen3ForCausalLM
+except ImportError:
+    Qwen3ForCausalLM = None
+
 logger = logging.get_logger(__name__)
 
 
@@ -42,7 +47,7 @@ class InternVLChatModel(PreTrainedModel):
     main_input_name = 'pixel_values'
     base_model_prefix = 'language_model'
     _no_split_modules = ['InternVisionModel', 'LlamaDecoderLayer', 'InternLM2DecoderLayer',
-                         'Phi3DecoderLayer', 'Qwen2DecoderLayer']
+                         'Phi3DecoderLayer', 'Qwen2DecoderLayer', 'Qwen3DecoderLayer']
     _supports_flash_attn_2 = True
     supports_gradient_checkpointing = True
 
@@ -81,6 +86,13 @@ class InternVLChatModel(PreTrainedModel):
                 self.language_model = Phi3ForCausalLM(config.llm_config)
             elif config.llm_config.architectures[0] == 'Qwen2ForCausalLM':
                 self.language_model = Qwen2ForCausalLM(config.llm_config)
+            elif config.llm_config.architectures[0] == 'Qwen3ForCausalLM':
+                if Qwen3ForCausalLM is None:
+                    raise ImportError(
+                        'Qwen3ForCausalLM requires transformers with Qwen3 support. '
+                        'Install transformers>=4.51.0.'
+                    )
+                self.language_model = Qwen3ForCausalLM(config.llm_config)
             else:
                 raise NotImplementedError(f'{config.llm_config.architectures[0]} is not implemented.')
 
@@ -100,6 +112,7 @@ class InternVLChatModel(PreTrainedModel):
             head_cfg = self.micro_internvl_config.get('detection_head', {})
             self.detection_head = MicroInternVLDetectionHead(
                 input_dim=vit_hidden_size,
+                text_dim=llm_hidden_size,
                 hidden_dim=head_cfg.get('hidden_dim', 512),
                 num_layers=head_cfg.get('num_layers', 2),
                 activation=head_cfg.get('activation', 'gelu'),
@@ -142,7 +155,7 @@ class InternVLChatModel(PreTrainedModel):
             target_modules = ['attention.wqkv', 'attention.wo', 'feed_forward.w1', 'feed_forward.w2', 'feed_forward.w3']
         elif self.llm_arch_name == 'Phi3ForCausalLM':
             target_modules = ['mlp.down_proj', 'mlp.gate_up_proj', 'self_attn.o_proj', 'self_attn.qkv_proj']
-        elif self.llm_arch_name in ['Qwen2ForCausalLM', 'LlamaForCausalLM']:
+        elif self.llm_arch_name in ['Qwen2ForCausalLM', 'Qwen3ForCausalLM', 'LlamaForCausalLM']:
             target_modules = ['self_attn.q_proj', 'self_attn.k_proj', 'self_attn.v_proj', 'self_attn.o_proj',
                               'mlp.gate_proj', 'mlp.down_proj', 'mlp.up_proj']
         else:
@@ -352,7 +365,8 @@ class InternVLChatModel(PreTrainedModel):
         Args:
             pixel_values: [B, 3, H, W]
             text_embeddings: Optional [K, D] tensor. If None, uses cached embeddings.
-            return_patch_features: If True, also return raw patch features.
+            return_patch_features: If True, also return patch embeddings projected
+                to the LLM text embedding space.
 
         Returns:
             Dict with pred_boxes, pred_objectness, and optionally pred_logits and patch_features.
@@ -363,6 +377,7 @@ class InternVLChatModel(PreTrainedModel):
 
         _, raw_patches = self.extract_feature(pixel_values, return_uncompressed=True)
         head_out = self.detection_head(raw_patches)
+        patch_embeddings = head_out['patch_embeddings']
 
         outputs = {
             'pred_boxes': head_out['pred_boxes'],
@@ -370,12 +385,14 @@ class InternVLChatModel(PreTrainedModel):
         }
 
         if return_patch_features:
-            outputs['patch_features'] = raw_patches
+            outputs['patch_features'] = patch_embeddings
 
         text_embeds = text_embeddings if text_embeddings is not None else self.text_embeddings
         if text_embeds is not None:
-            patch_norm = raw_patches / (raw_patches.norm(dim=-1, keepdim=True) + 1e-8)
-            logits = torch.matmul(patch_norm, text_embeds.T)
+            text_embeds = text_embeds.to(device=patch_embeddings.device, dtype=patch_embeddings.dtype)
+            patch_norm = patch_embeddings / (patch_embeddings.norm(dim=-1, keepdim=True) + 1e-8)
+            text_norm = text_embeds / (text_embeds.norm(dim=-1, keepdim=True) + 1e-8)
+            logits = torch.matmul(patch_norm, text_norm.T)
             temperature = 0.07
             if self.micro_internvl_config and 'temperature' in self.micro_internvl_config:
                 temperature = self.micro_internvl_config['temperature']
@@ -541,4 +558,3 @@ class InternVLChatModel(PreTrainedModel):
 
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
-        

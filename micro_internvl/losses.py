@@ -87,6 +87,19 @@ def generalized_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Ten
     return giou
 
 
+def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+    """Compute IoU between two sets of boxes in xyxy format."""
+    area1 = (boxes1[:, 2] - boxes1[:, 0]).clamp(min=0) * (boxes1[:, 3] - boxes1[:, 1]).clamp(min=0)
+    area2 = (boxes2[:, 2] - boxes2[:, 0]).clamp(min=0) * (boxes2[:, 3] - boxes2[:, 1]).clamp(min=0)
+
+    lt = torch.max(boxes1[:, None, :2], boxes2[None, :, :2])
+    rb = torch.min(boxes1[:, None, 2:], boxes2[None, :, 2:])
+    wh = (rb - lt).clamp(min=0)
+    inter = wh[:, :, 0] * wh[:, :, 1]
+    union = area1[:, None] + area2[None, :] - inter
+    return inter / union.clamp(min=1e-6)
+
+
 class HungarianMatcher(nn.Module):
     """DETR-style bipartite matching between predictions and ground-truth boxes."""
 
@@ -121,11 +134,11 @@ class HungarianMatcher(nn.Module):
             List of (pred_indices, target_indices) tuples, one per image.
         """
         bs, num_queries, num_classes = pred_logits.shape
-        pred_probs = pred_logits.softmax(-1)
+        pred_probs = pred_logits.sigmoid()
 
         indices = []
         for i in range(bs):
-            tgt_labels = target_labels[i]
+            tgt_labels = target_labels[i].to(pred_logits.device)
             tgt_boxes = target_boxes[i]
             num_targets = len(tgt_labels)
             if num_targets == 0:
@@ -180,7 +193,7 @@ def sigmoid_focal_loss(
 
 
 class DetectionLoss(nn.Module):
-    """Detection loss: focal classification + L1 + GIoU box regression."""
+    """Detection loss: focal classification + objectness + L1 + GIoU."""
 
     def __init__(
         self,
@@ -188,16 +201,20 @@ class DetectionLoss(nn.Module):
         weight_class: float = 1.0,
         weight_bbox: float = 5.0,
         weight_giou: float = 2.0,
+        weight_objectness: float = 1.0,
         focal_alpha: float = 0.25,
         focal_gamma: float = 2.0,
+        ignore_iou_threshold: float = 0.3,
     ):
         super().__init__()
         self.num_classes = num_classes
         self.weight_class = weight_class
         self.weight_bbox = weight_bbox
         self.weight_giou = weight_giou
+        self.weight_objectness = weight_objectness
         self.focal_alpha = focal_alpha
         self.focal_gamma = focal_gamma
+        self.ignore_iou_threshold = ignore_iou_threshold
         self.matcher = HungarianMatcher(
             cost_class=weight_class,
             cost_bbox=weight_bbox,
@@ -208,19 +225,23 @@ class DetectionLoss(nn.Module):
         self,
         pred_logits: torch.Tensor,
         pred_boxes: torch.Tensor,
+        pred_objectness: Optional[torch.Tensor],
         target_labels: List[torch.Tensor],
         target_boxes: List[torch.Tensor],
+        ignore_boxes: Optional[List[torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
         """Compute detection loss.
 
         Args:
             pred_logits: [B, 1024, num_classes]
             pred_boxes: [B, 1024, 4]
+            pred_objectness: Optional [B, 1024, 1] objectness logits
             target_labels: List of [num_targets_i]
             target_boxes: List of [num_targets_i, 4]
+            ignore_boxes: Optional list of novel boxes to mask from background loss
 
         Returns:
-            Dict with loss_class, loss_bbox, loss_giou, loss_det.
+            Dict with loss_class, loss_objectness, loss_bbox, loss_giou, loss_det.
         """
         bs, num_queries, _ = pred_logits.shape
         device = pred_logits.device
@@ -233,14 +254,19 @@ class DetectionLoss(nn.Module):
             (bs, num_queries), self.num_classes, dtype=torch.long, device=device
         )  # background class index = num_classes
         src_logits = pred_logits
+        target_objectness = torch.zeros((bs, num_queries, 1), dtype=pred_logits.dtype, device=device)
+        positive_mask = torch.zeros((bs, num_queries), dtype=torch.bool, device=device)
 
         src_boxes_list = []
         target_boxes_list = []
         for i, (pred_idx, tgt_idx) in enumerate(indices):
             if len(pred_idx) == 0:
                 continue
-            target_classes[i, pred_idx] = target_labels[i][tgt_idx]
-            src_boxes_list.append(pred_boxes[i, pred_idx])
+            pred_idx_device = pred_idx.to(device)
+            target_classes[i, pred_idx_device] = target_labels[i][tgt_idx].to(device)
+            target_objectness[i, pred_idx_device, 0] = 1.0
+            positive_mask[i, pred_idx_device] = True
+            src_boxes_list.append(pred_boxes[i, pred_idx_device])
             target_boxes_list.append(target_boxes[i][tgt_idx].to(device))
 
         # Classification loss (focal)
@@ -250,12 +276,38 @@ class DetectionLoss(nn.Module):
         target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
         target_classes_onehot = target_classes_onehot[:, :, :-1]  # remove background class
 
-        loss_class = sigmoid_focal_loss(
+        loss_class_raw = sigmoid_focal_loss(
             src_logits,
             target_classes_onehot,
             alpha=self.focal_alpha,
             gamma=self.focal_gamma,
-        ).sum() / (bs * num_queries)
+        ).sum(dim=-1)
+
+        valid_query_mask = torch.ones((bs, num_queries), dtype=pred_logits.dtype, device=device)
+        if ignore_boxes is not None:
+            pred_xyxy = box_cxcywh_to_xyxy(pred_boxes)
+            for i, img_ignore_boxes in enumerate(ignore_boxes):
+                if img_ignore_boxes.numel() == 0:
+                    continue
+                ignore_xyxy = box_cxcywh_to_xyxy(img_ignore_boxes.to(device))
+                max_iou = box_iou(pred_xyxy[i], ignore_xyxy).max(dim=1).values
+                ignored = (max_iou > self.ignore_iou_threshold) & (~positive_mask[i])
+                valid_query_mask[i, ignored] = 0.0
+
+        valid_denominator = valid_query_mask.sum().clamp(min=1.0)
+        loss_class = (loss_class_raw * valid_query_mask).sum() / valid_denominator
+
+        if pred_objectness is not None:
+            if pred_objectness.dim() == 2:
+                pred_objectness = pred_objectness.unsqueeze(-1)
+            loss_objectness_raw = F.binary_cross_entropy_with_logits(
+                pred_objectness,
+                target_objectness,
+                reduction="none",
+            ).squeeze(-1)
+            loss_objectness = (loss_objectness_raw * valid_query_mask).sum() / valid_denominator
+        else:
+            loss_objectness = torch.tensor(0.0, device=device)
 
         # Box regression losses
         if len(src_boxes_list) > 0:
@@ -263,12 +315,12 @@ class DetectionLoss(nn.Module):
             target_boxes_cat = torch.cat(target_boxes_list, dim=0)
 
             loss_bbox = F.l1_loss(src_boxes_cat, target_boxes_cat, reduction="sum")
-            loss_giou = 1 - torch.diag(
+            loss_giou = (1 - torch.diag(
                 generalized_box_iou(
                     box_cxcywh_to_xyxy(src_boxes_cat),
                     box_cxcywh_to_xyxy(target_boxes_cat),
                 )
-            ).sum()
+            )).sum()
 
             num_total_targets = sum(len(t) for t in target_labels)
             loss_bbox = loss_bbox / num_total_targets
@@ -279,12 +331,14 @@ class DetectionLoss(nn.Module):
 
         loss_det = (
             self.weight_class * loss_class
+            + self.weight_objectness * loss_objectness
             + self.weight_bbox * loss_bbox
             + self.weight_giou * loss_giou
         )
 
         return {
             "loss_class": loss_class,
+            "loss_objectness": loss_objectness,
             "loss_bbox": loss_bbox,
             "loss_giou": loss_giou,
             "loss_det": loss_det,
