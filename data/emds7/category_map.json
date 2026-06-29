@@ -1,0 +1,166 @@
+{
+  "G001": {
+    "id": 1,
+    "name": "Oscillatoria"
+  },
+  "G002": {
+    "id": 2,
+    "name": "Ankistrodesmus"
+  },
+  "G003": {
+    "id": 3,
+    "name": "Microcystis"
+  },
+  "G004": {
+    "id": 4,
+    "name": "Gomphonema"
+  },
+  "G005": {
+    "id": 5,
+    "name": "Sphaerocystis"
+  },
+  "G006": {
+    "id": 6,
+    "name": "Cosmarium"
+  },
+  "G007": {
+    "id": 7,
+    "name": "Cocconeis"
+  },
+  "G008": {
+    "id": 8,
+    "name": "Tribonema"
+  },
+  "G009": {
+    "id": 9,
+    "name": "Chlorella"
+  },
+  "G010": {
+    "id": 10,
+    "name": "Tetraedron"
+  },
+  "G011": {
+    "id": 11,
+    "name": "Ankistrodesmus"
+  },
+  "G012": {
+    "id": 12,
+    "name": "Brachionus"
+  },
+  "G013": {
+    "id": 13,
+    "name": "Chaenea"
+  },
+  "G014": {
+    "id": 14,
+    "name": "Pediastrum"
+  },
+  "G015": {
+    "id": 15,
+    "name": "Spirulina"
+  },
+  "G016": {
+    "id": 16,
+    "name": "Actinastrum"
+  },
+  "G017": {
+    "id": 17,
+    "name": "Navicula"
+  },
+  "G018": {
+    "id": 18,
+    "name": "Scenedesmus"
+  },
+  "G019": {
+    "id": 19,
+    "name": "Golenkinia"
+  },
+  "G020": {
+    "id": 20,
+    "name": "Pinnularia"
+  },
+  "G021": {
+    "id": 21,
+    "name": "Staurastrum"
+  },
+  "G022": {
+    "id": 22,
+    "name": "Phormidium"
+  },
+  "G023": {
+    "id": 23,
+    "name": "Fragilaria"
+  },
+  "G024": {
+    "id": 24,
+    "name": "Anabaenopsis"
+  },
+  "G025": {
+    "id": 25,
+    "name": "Coelosphaerium"
+  },
+  "G026": {
+    "id": 26,
+    "name": "Crucigenia"
+  },
+  "G027": {
+    "id": 27,
+    "name": "Achnanthes"
+  },
+  "G028": {
+    "id": 28,
+    "name": "Synedra"
+  },
+  "G029": {
+    "id": 29,
+    "name": "Ceratium"
+  },
+  "G030": {
+    "id": 30,
+    "name": "Pompholyx"
+  },
+  "G031": {
+    "id": 31,
+    "name": "Merismopedia"
+  },
+  "G032": {
+    "id": 32,
+    "name": "Spirogyra"
+  },
+  "G033": {
+    "id": 33,
+    "name": "Coelastrum"
+  },
+  "G034": {
+    "id": 34,
+    "name": "Raphidiopsis"
+  },
+  "G035": {
+    "id": 35,
+    "name": "Gomphosphaeria"
+  },
+  "G036": {
+    "id": 36,
+    "name": "Euglena"
+  },
+  "G037": {
+    "id": 37,
+    "name": "Euchlanis"
+  },
+  "G038": {
+    "id": 38,
+    "name": "Keratella"
+  },
+  "G039": {
+    "id": 39,
+    "name": "Brachionus diversicornis"
+  },
+  "G040": {
+    "id": 40,
+    "name": "Surirella"
+  },
+  "G041": {
+    "id": 41,
+    "name": "Characium"
+  }
+}

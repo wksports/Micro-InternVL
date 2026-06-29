@@ -1,0 +1,79 @@
+# Micro-InternVL training configuration
+# This config is loaded by micro_internvl/train.py and micro_internvl/evaluate.py.
+
+model:
+  # Official InternVL3.5-4B GitHub-format checkpoint.
+  # Download from: https://huggingface.co/OpenGVLab/InternVL3_5-4B
+  base_model: "OpenGVLab/InternVL3_5-4B"
+  torch_dtype: "bfloat16"
+  device_map: null  # set to "auto" only if multi-device offloading is needed
+
+# Official InternVL backbone LoRA (uses the official wrap_backbone_lora implementation)
+# This is applied to the vision encoder's attn.qkv, attn.proj, mlp.fc1, mlp.fc2.
+lora:
+  r: 64
+  alpha: 128  # should be 2 * r
+  dropout: 0.05
+
+# Micro-InternVL specific config injected into InternVLChatConfig
+micro_internvl:
+  detection_head:
+    hidden_dim: 512
+    num_layers: 2
+    activation: "gelu"
+  temperature: 0.07
+
+# Training
+training:
+  output_dir: "checkpoints"
+  num_epochs: 50
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  effective_batch_size: 8
+  head_lr: 5.0e-5
+  lora_lr: 1.0e-5
+  weight_decay: 0.05
+  lr_scheduler: "cosine"
+  warmup_epochs: 2
+  max_grad_norm: 0.1
+  gradient_checkpointing: true
+  mixed_precision: "bf16"
+  seed: 42
+  save_every_epochs: 5
+  eval_every_epochs: 5
+
+# Loss weights
+loss:
+  class_weight: 1.0
+  bbox_weight: 5.0
+  giou_weight: 2.0
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+  lambda_patch: 0.1
+  lambda_box: 0.1
+
+# Data paths are relative to this config file's directory
+data:
+  image_dir: "../raw/emds7/EMDS7"
+  train_json: "data/emds7/instances_train.json"
+  val_json: "data/emds7/instances_val.json"
+  test_json: "data/emds7/instances_test.json"
+  category_map: "data/emds7/category_map.json"
+  base_novel_split: "data/emds7/base_novel_split.json"
+  query_file: "data/emds7/queries.json"
+  resolution: 448
+  num_workers: 4
+  pin_memory: true
+
+# Inference / evaluation
+inference:
+  confidence_threshold: 0.001
+  nms_threshold: 0.5
+  top_k: 100
+
+# Logging
+logging:
+  log_dir: "outputs/logs"
+  use_wandb: false
+  wandb_project: "micro-internvl"
+  wandb_run_name: null
