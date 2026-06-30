@@ -389,8 +389,10 @@ class PatchTextAlignmentLoss(nn.Module):
         assert grid_size * grid_size == num_patches, "patch_features must be a square grid"
 
         # Normalize features
-        patch_features = F.normalize(patch_features, dim=-1)
-        text_embeddings = F.normalize(text_embeddings, dim=-1)
+        patch_features = torch.nan_to_num(patch_features.float(), nan=0.0, posinf=1e4, neginf=-1e4)
+        text_embeddings = torch.nan_to_num(text_embeddings.float(), nan=0.0, posinf=1e4, neginf=-1e4)
+        patch_features = F.normalize(patch_features, dim=-1, eps=1e-6)
+        text_embeddings = F.normalize(text_embeddings, dim=-1, eps=1e-6)
 
         # Build patch coordinate grid [grid_size, grid_size, 2] in [0, 1]
         y_coords = torch.linspace(0.5 / grid_size, 1 - 0.5 / grid_size, grid_size, device=device)
@@ -401,7 +403,9 @@ class PatchTextAlignmentLoss(nn.Module):
 
         losses = []
         for i in range(B):
-            boxes = target_boxes[i].to(device)  # [T, 4]
+            boxes = torch.nan_to_num(
+                target_boxes[i].to(device).float(), nan=0.5, posinf=1.0, neginf=0.0
+            ).clamp(0.0, 1.0)  # [T, 4]
             labels = target_labels[i].to(device)  # [T]
             if len(boxes) == 0:
                 continue
@@ -436,12 +440,16 @@ class PatchTextAlignmentLoss(nn.Module):
                 neg_text = text_embeddings[neg_mask]  # [K-1, D]
 
                 if hard_negative_embeddings is not None:
-                    hard_neg = F.normalize(hard_negative_embeddings, dim=-1).to(device)
+                    hard_neg = torch.nan_to_num(
+                        hard_negative_embeddings.to(device).float(), nan=0.0, posinf=1e4, neginf=-1e4
+                    )
+                    hard_neg = F.normalize(hard_neg, dim=-1, eps=1e-6)
                     neg_text = torch.cat([neg_text, hard_neg], dim=0)
 
                 # Compute similarity [N_pos, 1 + num_neg]
                 all_text = torch.cat([pos_text, neg_text], dim=0)  # [1 + num_neg, D]
                 logits = torch.matmul(pos_patches, all_text.T) / self.temperature  # [N_pos, 1 + num_neg]
+                logits = torch.nan_to_num(logits, nan=0.0, posinf=50.0, neginf=-50.0)
                 labels_pos = torch.zeros(pos_patches.size(0), dtype=torch.long, device=device)
                 loss = F.cross_entropy(logits, labels_pos)
                 losses.append(loss)
@@ -473,6 +481,8 @@ class BoxTextAlignmentLoss(nn.Module):
         Returns:
             box_features: [N, D] where N is total number of boxes across batch.
         """
+        patch_features = torch.nan_to_num(patch_features.float(), nan=0.0, posinf=1e4, neginf=-1e4)
+        boxes = torch.nan_to_num(boxes.float(), nan=0.5, posinf=1.0, neginf=0.0).clamp(0.0, 1.0)
         B, num_patches, D = patch_features.shape
         H = W = self.grid_size
         assert num_patches == H * W
@@ -536,6 +546,9 @@ class BoxTextAlignmentLoss(nn.Module):
         """
         device = patch_features.device
         B = patch_features.size(0)
+        patch_features = torch.nan_to_num(patch_features.float(), nan=0.0, posinf=1e4, neginf=-1e4)
+        pred_boxes = torch.nan_to_num(pred_boxes.float(), nan=0.5, posinf=1.0, neginf=0.0).clamp(0.0, 1.0)
+        text_embeddings = torch.nan_to_num(text_embeddings.float(), nan=0.0, posinf=1e4, neginf=-1e4)
 
         # For box-text alignment, we use matched predicted boxes.
         # In the simplest form, match each GT box to the best predicted box
@@ -574,11 +587,13 @@ class BoxTextAlignmentLoss(nn.Module):
         labels = torch.cat(labels_list, dim=0)  # [N]
 
         # Normalize
-        box_features = F.normalize(box_features, dim=-1)
-        text_embeddings = F.normalize(text_embeddings, dim=-1)
+        box_features = torch.nan_to_num(box_features.float(), nan=0.0, posinf=1e4, neginf=-1e4)
+        box_features = F.normalize(box_features, dim=-1, eps=1e-6)
+        text_embeddings = F.normalize(text_embeddings, dim=-1, eps=1e-6)
 
         # Similarities [N, K]
         logits = torch.matmul(box_features, text_embeddings.T) / self.temperature
+        logits = torch.nan_to_num(logits, nan=0.0, posinf=50.0, neginf=-50.0)
 
         # Cross-entropy with GT labels
         loss = F.cross_entropy(logits, labels)

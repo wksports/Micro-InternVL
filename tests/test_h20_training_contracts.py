@@ -163,6 +163,34 @@ class H20TrainingContracts(unittest.TestCase):
         self.assertIn("pred_boxes = torch.nan_to_num(pred_boxes", detection_loss_fn)
         self.assertIn("pred_objectness = torch.nan_to_num(pred_objectness", detection_loss_fn)
 
+    def test_alignment_losses_sanitize_features_before_normalization(self) -> None:
+        loss_source = read_text("micro_internvl/losses.py")
+        patch_loss_fn = loss_source[
+            loss_source.index("class PatchTextAlignmentLoss") :
+            loss_source.index("class BoxTextAlignmentLoss")
+        ]
+        box_loss_fn = loss_source[loss_source.index("class BoxTextAlignmentLoss") :]
+
+        for source in (patch_loss_fn, box_loss_fn):
+            self.assertIn("torch.nan_to_num(", source)
+            self.assertIn("F.normalize(", source)
+            self.assertIn("eps=1e-6", source)
+            self.assertIn("logits = torch.nan_to_num(logits", source)
+
+    def test_training_skips_nonfinite_loss_before_backward(self) -> None:
+        train_source = read_text("micro_internvl/train.py")
+        train_one_epoch = train_source[
+            train_source.index("def train_one_epoch") :
+            train_source.index("def main")
+        ]
+
+        self.assertIn("if not torch.isfinite(loss):", train_one_epoch)
+        self.assertIn("Skipping non-finite loss", train_one_epoch)
+        self.assertLess(
+            train_one_epoch.index("if not torch.isfinite(loss):"),
+            train_one_epoch.index("loss = loss / grad_accum_steps"),
+        )
+
     def test_h20_dependency_floor_supports_qwen3(self) -> None:
         requirements = read_text("requirements.txt")
         match = re.search(r"transformers>=([0-9]+)\.([0-9]+)\.([0-9]+)", requirements)

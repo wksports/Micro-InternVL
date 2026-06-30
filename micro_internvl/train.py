@@ -315,6 +315,16 @@ def train_one_epoch(
                 loss = loss + lambda_box * loss_box
                 total_loss_box += loss_box.item()
 
+        if not torch.isfinite(loss):
+            logger.warning(
+                "Skipping non-finite loss at epoch %s step %s: loss=%s",
+                epoch,
+                step,
+                loss.detach().item(),
+            )
+            optimizer.zero_grad()
+            continue
+
         loss = loss / grad_accum_steps
 
         if scaler is not None:
