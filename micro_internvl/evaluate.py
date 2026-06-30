@@ -107,12 +107,18 @@ def micro_internvl_predictions_to_coco(
                 keep = apply_nms(boxes_xyxy, scores, iou_threshold=nms_threshold, top_k=top_k)
 
                 boxes = boxes[keep]
-                scores = scores[keep]
+                scores = scores[keep].float()
                 labels = labels[keep]
 
-                boxes_abs = boxes.cpu().numpy()
-                boxes_abs[:, [0, 2]] *= orig_w
-                boxes_abs[:, [1, 3]] *= orig_h
+                boxes_xyxy = box_cxcywh_to_xyxy(boxes).clamp(0.0, 1.0).float()
+                boxes_xyxy_abs = boxes_xyxy.cpu().numpy()
+                boxes_xyxy_abs[:, [0, 2]] *= orig_w
+                boxes_xyxy_abs[:, [1, 3]] *= orig_h
+                boxes_abs = np.zeros_like(boxes_xyxy_abs)
+                boxes_abs[:, 0] = boxes_xyxy_abs[:, 0]
+                boxes_abs[:, 1] = boxes_xyxy_abs[:, 1]
+                boxes_abs[:, 2] = boxes_xyxy_abs[:, 2] - boxes_xyxy_abs[:, 0]
+                boxes_abs[:, 3] = boxes_xyxy_abs[:, 3] - boxes_xyxy_abs[:, 1]
 
                 for j in range(len(boxes)):
                     coco_cat_id = idx_to_coco_id[int(labels[j].item())]

@@ -127,6 +127,20 @@ class H20TrainingContracts(unittest.TestCase):
         self.assertIn("nms_scores = scores.float()", apply_nms_fn)
         self.assertIn("ops.nms(nms_boxes, nms_scores, iou_threshold)", apply_nms_fn)
 
+    def test_prediction_export_casts_reduced_precision_outputs_to_float32(self) -> None:
+        evaluate_source = read_text("micro_internvl/evaluate.py")
+        prediction_fn = evaluate_source[
+            evaluate_source.index("def micro_internvl_predictions_to_coco") :
+            evaluate_source.index("def evaluate_coco")
+        ]
+
+        self.assertIn("boxes = boxes[keep]", prediction_fn)
+        self.assertIn("scores = scores[keep].float()", prediction_fn)
+        self.assertIn("boxes_xyxy = box_cxcywh_to_xyxy(boxes).clamp(0.0, 1.0).float()", prediction_fn)
+        self.assertIn("boxes_xyxy_abs = boxes_xyxy.cpu().numpy()", prediction_fn)
+        self.assertIn("boxes_abs[:, 2] = boxes_xyxy_abs[:, 2] - boxes_xyxy_abs[:, 0]", prediction_fn)
+        self.assertIn("boxes_abs[:, 3] = boxes_xyxy_abs[:, 3] - boxes_xyxy_abs[:, 1]", prediction_fn)
+
     def test_h20_dependency_floor_supports_qwen3(self) -> None:
         requirements = read_text("requirements.txt")
         match = re.search(r"transformers>=([0-9]+)\.([0-9]+)\.([0-9]+)", requirements)
