@@ -66,6 +66,8 @@ def micro_internvl_predictions_to_coco(
     confidence_threshold: float = 0.001,
     nms_threshold: float = 0.5,
     top_k: int = 100,
+    use_amp: bool = False,
+    amp_dtype: torch.dtype = torch.float32,
 ) -> List[Dict[str, Any]]:
     """Run inference and return COCO-format predictions."""
     model.eval()
@@ -74,7 +76,8 @@ def micro_internvl_predictions_to_coco(
     with torch.no_grad():
         for images, targets in tqdm(dataloader, desc="Predicting"):
             images = images.to(device)
-            outputs = model(pixel_values=images)
+            with torch.autocast(device_type=device.type, enabled=use_amp, dtype=amp_dtype):
+                outputs = model(pixel_values=images)
 
             pred_boxes = outputs["pred_boxes"]
             pred_logits = outputs["pred_logits"]
@@ -122,6 +125,21 @@ def micro_internvl_predictions_to_coco(
                     })
 
     return predictions
+
+
+def get_inference_amp_settings(mixed_precision: str, device: torch.device) -> tuple[bool, torch.dtype]:
+    """Return autocast settings for inference."""
+    if device.type != "cuda":
+        return False, torch.float32
+
+    precision = str(mixed_precision).lower()
+    if precision in {"no", "none", "false", "fp32", "float32"}:
+        return False, torch.float32
+    if precision in {"bf16", "bfloat16"}:
+        return True, torch.bfloat16
+    if precision in {"fp16", "float16"}:
+        return True, torch.float16
+    raise ValueError(f"Unsupported mixed_precision: {mixed_precision}")
 
 
 def evaluate_coco(coco_gt: COCO, predictions: List[Dict[str, Any]], cat_ids: List[int] | None = None) -> Dict[str, float]:
@@ -190,6 +208,10 @@ def main():
         queries = [idx_to_name[i] for i in range(num_classes)]
         logger.info("Using category name queries")
     model.set_text_embeddings(model.encode_text_queries(queries))
+    use_amp, amp_dtype = get_inference_amp_settings(
+        config["training"].get("mixed_precision", "no"),
+        device,
+    )
 
     split_json = (base_dir / config["data"][f"{args.split}_json"]).resolve()
     image_dir = (base_dir / config["data"]["image_dir"]).resolve()
@@ -220,6 +242,8 @@ def main():
         confidence_threshold=config["inference"].get("confidence_threshold", 0.001),
         nms_threshold=config["inference"].get("nms_threshold", 0.5),
         top_k=config["inference"].get("top_k", 100),
+        use_amp=use_amp,
+        amp_dtype=amp_dtype,
     )
     logger.info(f"Generated {len(predictions)} predictions")
 

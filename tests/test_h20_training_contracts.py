@@ -88,6 +88,34 @@ class H20TrainingContracts(unittest.TestCase):
         self.assertNotIn("scheduler.step()", main_loop)
         self.assertIn("optimizer_steps_per_epoch", train_source)
 
+    def test_validation_uses_same_amp_dtype_as_training(self) -> None:
+        evaluate_source = read_text("micro_internvl/evaluate.py")
+        train_source = read_text("micro_internvl/train.py")
+
+        prediction_fn = evaluate_source[
+            evaluate_source.index("def micro_internvl_predictions_to_coco") :
+            evaluate_source.index("def evaluate_coco")
+        ]
+        validation_fn = train_source[
+            train_source.index("def run_validation") :
+            train_source.index("def train_one_epoch")
+        ]
+        main_loop = train_source[train_source.index("for epoch in range") :]
+
+        self.assertIn("use_amp: bool = False", prediction_fn)
+        self.assertIn("amp_dtype: torch.dtype = torch.float32", prediction_fn)
+        self.assertIn("torch.autocast(device_type=device.type, enabled=use_amp, dtype=amp_dtype)", prediction_fn)
+        self.assertRegex(
+            prediction_fn,
+            r"with torch\.autocast\([^)]*\):\s+outputs = model\(pixel_values=images\)",
+        )
+        self.assertIn("use_amp: bool", validation_fn)
+        self.assertIn("amp_dtype: torch.dtype", validation_fn)
+        self.assertIn("use_amp=use_amp", validation_fn)
+        self.assertIn("amp_dtype=amp_dtype", validation_fn)
+        self.assertIn("use_amp=use_amp", main_loop)
+        self.assertIn("amp_dtype=amp_dtype", main_loop)
+
     def test_h20_dependency_floor_supports_qwen3(self) -> None:
         requirements = read_text("requirements.txt")
         match = re.search(r"transformers>=([0-9]+)\.([0-9]+)\.([0-9]+)", requirements)

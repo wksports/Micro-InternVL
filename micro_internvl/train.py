@@ -197,6 +197,8 @@ def run_validation(
     idx_to_coco_id: Dict[int, int],
     val_json: str,
     base_novel_split_path: str,
+    use_amp: bool,
+    amp_dtype: torch.dtype,
 ) -> Dict[str, float]:
     """Run validation and return COCO metrics."""
     predictions = micro_internvl_predictions_to_coco(
@@ -207,6 +209,8 @@ def run_validation(
         confidence_threshold=config["inference"].get("confidence_threshold", 0.001),
         nms_threshold=config["inference"].get("nms_threshold", 0.5),
         top_k=config["inference"].get("top_k", 100),
+        use_amp=use_amp,
+        amp_dtype=amp_dtype,
     )
 
     coco_gt_raw = load_coco(Path(val_json))
@@ -554,6 +558,8 @@ def main():
                 idx_to_coco_id=idx_to_coco_id,
                 val_json=val_json,
                 base_novel_split_path=base_novel_split,
+                use_amp=use_amp,
+                amp_dtype=amp_dtype,
             )
             logger.info(f"Validation metrics: {val_metrics}")
 
