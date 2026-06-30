@@ -46,6 +46,12 @@ class H20TrainingContracts(unittest.TestCase):
         self.assertIn("Qwen3ForCausalLM", model_source)
         self.assertIn("Qwen3DecoderLayer", model_source)
 
+    def test_default_internvl_config_has_supported_llm_architecture(self) -> None:
+        config_source = read_text("internvl/model/internvl_chat/configuration_internvl_chat.py")
+
+        self.assertNotIn("llm_config = {'architectures': ['']}", config_source)
+        self.assertIn("llm_config = {'architectures': ['LlamaForCausalLM']}", config_source)
+
     def test_detection_logits_use_projected_patch_embeddings(self) -> None:
         head_source = read_text("internvl/model/internvl_chat/micro_internvl_head.py")
         model_source = read_text("internvl/model/internvl_chat/modeling_internvl_chat.py")
