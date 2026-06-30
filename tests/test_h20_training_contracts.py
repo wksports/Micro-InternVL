@@ -141,6 +141,28 @@ class H20TrainingContracts(unittest.TestCase):
         self.assertIn("boxes_abs[:, 2] = boxes_xyxy_abs[:, 2] - boxes_xyxy_abs[:, 0]", prediction_fn)
         self.assertIn("boxes_abs[:, 3] = boxes_xyxy_abs[:, 3] - boxes_xyxy_abs[:, 1]", prediction_fn)
 
+    def test_matcher_sanitizes_nonfinite_costs_before_scipy(self) -> None:
+        loss_source = read_text("micro_internvl/losses.py")
+        matcher_fn = loss_source[
+            loss_source.index("class HungarianMatcher") :
+            loss_source.index("def sigmoid_focal_loss")
+        ]
+        detection_loss_fn = loss_source[
+            loss_source.index("class DetectionLoss") :
+            loss_source.index("class PatchTextAlignmentLoss")
+        ]
+
+        self.assertIn("pred_logits = torch.nan_to_num(pred_logits.float()", matcher_fn)
+        self.assertIn("pred_boxes = torch.nan_to_num(pred_boxes.float()", matcher_fn)
+        self.assertIn("target_boxes = [", matcher_fn)
+        self.assertIn("torch.nan_to_num(boxes.float()", matcher_fn)
+        self.assertIn("cost = torch.nan_to_num(cost", matcher_fn)
+        self.assertIn("posinf=1e6", matcher_fn)
+        self.assertIn("neginf=-1e6", matcher_fn)
+        self.assertIn("pred_logits = torch.nan_to_num(pred_logits", detection_loss_fn)
+        self.assertIn("pred_boxes = torch.nan_to_num(pred_boxes", detection_loss_fn)
+        self.assertIn("pred_objectness = torch.nan_to_num(pred_objectness", detection_loss_fn)
+
     def test_h20_dependency_floor_supports_qwen3(self) -> None:
         requirements = read_text("requirements.txt")
         match = re.search(r"transformers>=([0-9]+)\.([0-9]+)\.([0-9]+)", requirements)

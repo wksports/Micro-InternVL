@@ -133,6 +133,12 @@ class HungarianMatcher(nn.Module):
         Returns:
             List of (pred_indices, target_indices) tuples, one per image.
         """
+        pred_logits = torch.nan_to_num(pred_logits.float(), nan=0.0, posinf=50.0, neginf=-50.0)
+        pred_boxes = torch.nan_to_num(pred_boxes.float(), nan=0.5, posinf=1.0, neginf=0.0).clamp(0.0, 1.0)
+        target_boxes = [
+            torch.nan_to_num(boxes.float(), nan=0.5, posinf=1.0, neginf=0.0).clamp(0.0, 1.0)
+            for boxes in target_boxes
+        ]
         bs, num_queries, num_classes = pred_logits.shape
         pred_probs = pred_logits.sigmoid()
 
@@ -164,6 +170,7 @@ class HungarianMatcher(nn.Module):
                 + self.cost_giou * cost_giou
             )
 
+            cost = torch.nan_to_num(cost, nan=1e6, posinf=1e6, neginf=-1e6)
             cost = cost.cpu()
             if HAS_SCIPY:
                 pred_idx, tgt_idx = linear_sum_assignment(cost)
@@ -245,6 +252,10 @@ class DetectionLoss(nn.Module):
         """
         bs, num_queries, _ = pred_logits.shape
         device = pred_logits.device
+        pred_logits = torch.nan_to_num(pred_logits, nan=0.0, posinf=50.0, neginf=-50.0)
+        pred_boxes = torch.nan_to_num(pred_boxes, nan=0.5, posinf=1.0, neginf=0.0).clamp(0.0, 1.0)
+        if pred_objectness is not None:
+            pred_objectness = torch.nan_to_num(pred_objectness, nan=0.0, posinf=50.0, neginf=-50.0)
 
         # Match predictions to targets
         indices = self.matcher(pred_logits, pred_boxes, target_labels, target_boxes)
