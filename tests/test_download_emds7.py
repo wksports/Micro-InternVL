@@ -9,6 +9,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,34 @@ class DownloadEmds7Tests(unittest.TestCase):
 
         self.assertEqual(selected["name"], "EMDS7.zip")
         self.assertEqual(selected["download_url"], "https://example/emds7.zip")
+
+    def test_figshare_metadata_request_uses_browser_headers(self) -> None:
+        module = load_module()
+
+        class FakeResponse:
+            def read(self):
+                return json.dumps({"files": []}).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        with mock.patch.object(module.urllib.request, "urlopen", return_value=FakeResponse()) as urlopen_mock:
+            with self.assertRaisesRegex(RuntimeError, "No files found"):
+                module.fetch_figshare_files(16869571)
+            request = urlopen_mock.call_args.args[0]
+            self.assertIn("Mozilla", request.headers["User-agent"])
+
+    def test_builds_manual_archive_metadata_when_archive_url_is_provided(self) -> None:
+        module = load_module()
+
+        selected = module.build_manual_archive_file("https://example.com/EMDS7.zip", "EMDS7.zip")
+
+        self.assertEqual(selected["name"], "EMDS7.zip")
+        self.assertEqual(selected["download_url"], "https://example.com/EMDS7.zip")
+        self.assertIsNone(selected["size"])
 
     def test_extracts_zip_and_flattens_images_to_target_directory(self) -> None:
         module = load_module()

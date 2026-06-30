@@ -24,13 +24,21 @@ from tqdm import tqdm
 DEFAULT_ARTICLE_ID = 16869571
 DEFAULT_FILE_NAME = "EMDS7.zip"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0 Safari/537.36 Micro-InternVL"
+    ),
+    "Accept": "application/json,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+}
 
 
 def fetch_figshare_files(article_id: int) -> List[Dict]:
     """Fetch file metadata for a Figshare article."""
     url = f"https://api.figshare.com/v2/articles/{article_id}"
+    request = urllib.request.Request(url, headers=REQUEST_HEADERS)
     try:
-        with urllib.request.urlopen(url, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=60) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Failed to fetch Figshare metadata from {url}: {exc}") from exc
@@ -58,6 +66,15 @@ def select_dataset_file(files: Sequence[Dict], preferred_name: str = DEFAULT_FIL
     raise RuntimeError(f"Multiple zip files found ({names}); pass --file-name to choose one")
 
 
+def build_manual_archive_file(archive_url: str, file_name: str = DEFAULT_FILE_NAME) -> Dict:
+    """Build Figshare-like file metadata from a direct archive URL."""
+    return {
+        "name": file_name,
+        "download_url": archive_url,
+        "size": None,
+    }
+
+
 def download_file(url: str, destination: Path, expected_size: int | None = None, force: bool = False) -> None:
     """Download a URL to destination with a byte progress bar."""
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -72,7 +89,7 @@ def download_file(url: str, destination: Path, expected_size: int | None = None,
     if tmp_path.exists():
         tmp_path.unlink()
 
-    request = urllib.request.Request(url, headers={"User-Agent": "Micro-InternVL dataset downloader"})
+    request = urllib.request.Request(url, headers=REQUEST_HEADERS)
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             total = expected_size or int(response.headers.get("Content-Length") or 0) or None
@@ -161,6 +178,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Download and prepare EMDS-7 images for Micro-InternVL")
     parser.add_argument("--article-id", type=int, default=DEFAULT_ARTICLE_ID, help="Figshare article id")
     parser.add_argument("--file-name", type=str, default=DEFAULT_FILE_NAME, help="Dataset zip file name on Figshare")
+    parser.add_argument(
+        "--archive-url",
+        type=str,
+        default=None,
+        help="Direct zip URL. Use this if the Figshare metadata API is blocked by the server network.",
+    )
     parser.add_argument("--output-dir", type=Path, default=Path("raw/emds7"), help="Directory for archive and extraction")
     parser.add_argument("--image-dir", type=Path, default=Path("raw/emds7/EMDS7"), help="Final flat image directory")
     parser.add_argument("--annotation-dir", type=Path, default=Path("data/emds7"), help="COCO annotation directory")
@@ -175,9 +198,13 @@ def main() -> int:
     image_dir = args.image_dir.resolve()
     annotation_dir = args.annotation_dir.resolve()
 
-    print(f"Fetching Figshare metadata for article {args.article_id}...")
-    files = fetch_figshare_files(args.article_id)
-    selected = select_dataset_file(files, preferred_name=args.file_name)
+    if args.archive_url:
+        print("Using direct archive URL; skipping Figshare metadata lookup.")
+        selected = build_manual_archive_file(args.archive_url, args.file_name)
+    else:
+        print(f"Fetching Figshare metadata for article {args.article_id}...")
+        files = fetch_figshare_files(args.article_id)
+        selected = select_dataset_file(files, preferred_name=args.file_name)
 
     archive_name = selected["name"]
     download_url = selected["download_url"]
