@@ -16,5 +16,6 @@ pip install -r requirements.txt
 
 echo "Installation complete."
 echo "Next steps:"
-echo "  1. Generate queries: python scripts/generate_queries.py --config micro_internvl/config.yaml"
-echo "  2. Start training:    bash scripts/train.sh"
+echo "  1. Download images:   python scripts/download_emds7.py"
+echo "  2. Generate queries:  python scripts/generate_queries.py --config micro_internvl/config.yaml"
+echo "  3. Start training:    bash scripts/train.sh"

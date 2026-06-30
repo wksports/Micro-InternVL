@@ -64,6 +64,14 @@ bash scripts/install.sh
 
 将原始图像放在 `raw/emds7/EMDS7/`（与 `micro_internvl/config.yaml` 中的 `data.image_dir` 对应）。
 
+也可以在服务器上直接下载公开 EMDS-7 图像数据：
+
+```bash
+python scripts/download_emds7.py --output-dir raw/emds7 --image-dir raw/emds7/EMDS7
+```
+
+脚本会显示下载、解压和图片整理进度，并检查 `data/emds7/instances_*.json` 中引用的图片是否都存在。
+
 ### 3. 生成层次化查询
 
 ```bash
