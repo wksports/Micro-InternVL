@@ -116,6 +116,17 @@ class H20TrainingContracts(unittest.TestCase):
         self.assertIn("use_amp=use_amp", main_loop)
         self.assertIn("amp_dtype=amp_dtype", main_loop)
 
+    def test_nms_casts_reduced_precision_inputs_to_float32(self) -> None:
+        utils_source = read_text("micro_internvl/utils.py")
+        apply_nms_fn = utils_source[
+            utils_source.index("def apply_nms") :
+            utils_source.index("def box_cxcywh_to_xyxy")
+        ]
+
+        self.assertIn("nms_boxes = boxes.float()", apply_nms_fn)
+        self.assertIn("nms_scores = scores.float()", apply_nms_fn)
+        self.assertIn("ops.nms(nms_boxes, nms_scores, iou_threshold)", apply_nms_fn)
+
     def test_h20_dependency_floor_supports_qwen3(self) -> None:
         requirements = read_text("requirements.txt")
         match = re.search(r"transformers>=([0-9]+)\.([0-9]+)\.([0-9]+)", requirements)

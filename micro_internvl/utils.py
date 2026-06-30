@@ -48,7 +48,9 @@ def apply_nms(
     if boxes.numel() == 0:
         return torch.zeros(0, dtype=torch.long, device=boxes.device)
 
-    keep = ops.nms(boxes, scores, iou_threshold)
+    nms_boxes = boxes.float()
+    nms_scores = scores.float()
+    keep = ops.nms(nms_boxes, nms_scores, iou_threshold)
     if top_k > 0:
         keep = keep[:top_k]
     return keep
